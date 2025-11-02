@@ -1,0 +1,64 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main  # 推送到 main 分支时触发
+
+jobs:
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            set -e
+            echo "🚀 Starting deployment..."
+
+            # 进入项目目录
+            cd /opt/new-api
+
+            # 拉取最新代码
+            echo "📦 Pulling latest code from GitHub..."
+            git pull origin main
+
+            # 停止服务
+            echo "⏸️  Stopping services..."
+            docker-compose down
+
+            # 重新构建并启动
+            echo "🔨 Building and starting services..."
+            docker-compose up -d --build
+
+            # 等待服务启动
+            echo "⏳ Waiting for services to start..."
+            sleep 10
+
+            # 检查服务状态
+            echo "✅ Checking service status..."
+            docker-compose ps
+
+            # 检查健康状态
+            echo "🏥 Health check..."
+            curl -f http://localhost:3000/api/status || echo "⚠️  Health check failed"
+
+            echo "🎉 Deployment completed successfully!"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+          fi
